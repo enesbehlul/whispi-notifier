@@ -2,11 +2,11 @@
 
 whispi.io gelen kutuna **yeni bir soru** geldiğinde sana **Telegram'dan** anında bildirim gönderir.
 
-GitHub Actions üzerinde ücretsiz çalışır — bilgisayarın kapalı olsa bile her ~5 dakikada bir kontrol eder. Kurulum tamamen bir kerelik.
+GitHub Actions üzerinde ücretsiz çalışır — bilgisayarın kapalı olsa bile her ~30 dakikada bir kontrol eder. Kurulum tamamen bir kerelik.
 
 ## Nasıl çalışır?
 
-1. GitHub Actions cron'u her ~5 dakikada bir `src/index.js`'i çalıştırır.
+1. GitHub Actions cron'u her ~30 dakikada bir `src/index.js`'i çalıştırır.
 2. Betik whispi.io GraphQL API'sine **giriş yapar** (`Login` mutation → `accessToken`).
 3. **Gelen kutusunu** çeker (`GetQuestions` sorgusu → cevaplanmamış sorular).
 4. `state.json`'daki "daha önce görülenler" listesiyle karşılaştırır.
@@ -65,7 +65,7 @@ GitHub repo sayfasında: **Settings → Secrets and variables → Actions → Ne
 2. **"whispi bildirim"** workflow'unu seç → **Run workflow** ile elle bir kez tetikle.
 3. İlk çalışma mevcut soruları "temel" alır ve bildirim **göndermez** (geçmiş sorular için spam olmasın diye). Bundan sonra gelen **yeni** her soru için Telegram'a mesaj düşer.
 
-Sonrası otomatik: cron her ~5 dakikada bir kontrol eder.
+Sonrası otomatik: cron her ~30 dakikada bir kontrol eder.
 
 ---
 
@@ -83,7 +83,7 @@ npm run start:env
 
 ## Notlar
 
-- **Kontrol sıklığı:** GitHub cron'unun en küçük etkili aralığı ~5 dakikadır ve yoğunlukta birkaç dakika gecikebilir. Daha sık istersen `.github/workflows/notify.yml` içindeki `cron` değerini düzenle (ama 5 dk'dan küçük genelde işe yaramaz).
+- **Kontrol sıklığı:** Varsayılan 30 dakikadır (private repo'nun ücretsiz ~2000 dk/ay kotası altında kalsın diye). `.github/workflows/notify.yml` içindeki `cron` değerinden değiştirebilirsin. Daha sık kontrol istersen repoyu **public** yapman önerilir — public repolarda Actions sınırsız ücretsizdir, o zaman 5 dakikaya çekebilirsin.
 - **Güvenlik:** Şifren yalnızca GitHub Secrets içinde şifreli durur, kodda/loglarda görünmez. İçin daha rahat olsun istersen whispi.io şifreni değiştirip yenisini secret olarak koyabilirsin.
 - **Token süresi:** Her çalışmada yeniden giriş yapılır, bu yüzden token süresini takip etmeye gerek yok.
 - **state.json:** "Görülen soru" geçmişini tutar; Actions her yeni soruda bunu repoya `[skip ci]` ile geri commit'ler (sonsuz tetikleme olmaz).

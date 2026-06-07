@@ -2,8 +2,9 @@ name: whispi bildirim
 
 on:
   schedule:
-    # GitHub cron'unun en küçük etkili aralığı ~5 dakikadır (ve yoğunlukta gecikebilir).
-    - cron: "*/5 * * * *"
+    # Her 30 dakikada bir (private repo ücretsiz kotası ~2000 dk/ay altında kalsın diye).
+    # Daha sık istersen aralığı küçült; ama 5 dk altı GitHub'da genelde işe yaramaz.
+    - cron: "*/30 * * * *"
   workflow_dispatch: {} # Actions sekmesinden elle tetikleme
 
 permissions:
