@@ -1,10 +1,12 @@
 name: whispi bildirim
 
 on:
-  schedule:
-    # Her 5 dakikada bir. Repo public olduğu için Actions dakikası sınırsız/ücretsiz.
-    # (GitHub schedule best-effort'tur; yoğunlukta birkaç dakika gecikebilir.)
-    - cron: "*/5 * * * *"
+  # NOT: Otomatik zamanlama Deno Deploy'a taşındı (çok daha güvenilir, ~1 dk).
+  # GitHub'ın schedule tetikleyicisi KAPATILDI (çift bildirimi önlemek için).
+  # Bu workflow yalnızca elle (yedek) çalıştırılabilir kalıyor.
+  # Geri açmak istersen aşağıdaki schedule bloğunun yorumunu kaldır:
+  #   schedule:
+  #     - cron: "*/5 * * * *"
   workflow_dispatch: {} # Actions sekmesinden elle tetikleme
 
 permissions:
