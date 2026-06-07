@@ -3,7 +3,7 @@
 //
 // Gerekli ortam değişkenleri (Deno Deploy → app → Environment Variables):
 //   WHISPI_EMAIL, WHISPI_PASSWORD, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
-// İsteğe bağlı: REQUEST_TIMEOUT_MS, REQUEST_RETRIES, WHISPI_MAX_QUESTIONS, CRON_SCHEDULE
+// İsteğe bağlı: REQUEST_TIMEOUT_MS, REQUEST_RETRIES, WHISPI_MAX_QUESTIONS
 
 const WHISPI_API = "https://api.whispi.io/graphql";
 const TG_API = "https://api.telegram.org";
@@ -12,7 +12,6 @@ const TIMEOUT_MS = Number(Deno.env.get("REQUEST_TIMEOUT_MS")) || 15000;
 const RETRIES = Number(Deno.env.get("REQUEST_RETRIES")) || 3;
 const MAX_QUESTIONS = Number(Deno.env.get("WHISPI_MAX_QUESTIONS")) || 500;
 const MAX_CONTENT = 3500; // Telegram 4096 sınırı için pay
-const CRON_SCHEDULE = Deno.env.get("CRON_SCHEDULE") || "* * * * *"; // her dakika
 
 const kv = await Deno.openKv();
 const STATE_KEY = ["whispi", "state"];
@@ -262,11 +261,20 @@ async function check(): Promise<void> {
   console.log(`Tamamlandı (${sent}/${fresh.length} bildirim).`);
 }
 
-// Deno Deploy bu tanımı otomatik algılar ve zamanında çalıştırır.
-Deno.cron("whispi-check", CRON_SCHEDULE, async () => {
+// Deno Deploy bu tanımı otomatik algılar ve her dakika çalıştırır.
+Deno.cron("whispi-check", "* * * * *", async () => {
   try {
     await check();
   } catch (err) {
     console.error("HATA:", (err as Error).message);
   }
 });
+
+// Platformun bir HTTP sunucusu beklediği durumlar için minimal sağlık ucu.
+// Asıl iş yukarıdaki cron ile yapılır; burası sadece "ayakta mı?" cevabı verir.
+Deno.serve(() =>
+  new Response("whispi-notifier çalışıyor ✓ (kontrol her dakika cron ile yapılır)\n", {
+    headers: { "content-type": "text/plain; charset=utf-8" },
+  })
+);
+
