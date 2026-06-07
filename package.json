@@ -4,12 +4,13 @@
   "private": true,
   "type": "module",
   "description": "whispi.io gelen kutusuna yeni soru geldiğinde Telegram bildirimi gönderir",
+  "license": "UNLICENSED",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
     "start:env": "node --env-file=.env src/index.js"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=20.6"
   }
 }

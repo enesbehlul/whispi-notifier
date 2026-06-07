@@ -7,8 +7,9 @@ import { fileURLToPath } from "node:url";
 
 const STATE_PATH = fileURLToPath(new URL("../state.json", import.meta.url));
 
-// seenIds listesini sınırlı tut (sonsuz büyümesin).
-const MAX_SEEN = 500;
+// seenIds listesini sınırlı tut (sonsuz büyümesin). Genelde index.js zaten
+// gelen kutusuyla budar; bu yalnızca son güvenlik tavanı. Env ile ayarlanabilir.
+const MAX_SEEN = Number(process.env.STATE_MAX_SEEN) || 500;
 
 /**
  * @returns {Promise<{initialized: boolean, seenIds: string[]}>}
@@ -16,7 +17,8 @@ const MAX_SEEN = 500;
 export async function readState() {
   try {
     const raw = await readFile(STATE_PATH, "utf8");
-    const parsed = JSON.parse(raw);
+    // Başta BOM varsa (dosya UTF-8-BOM kaydedilmişse) ayıkla, yoksa JSON.parse patlar.
+    const parsed = JSON.parse(raw.replace(/^﻿/, ""));
     return {
       initialized: Boolean(parsed.initialized),
       seenIds: Array.isArray(parsed.seenIds) ? parsed.seenIds : [],

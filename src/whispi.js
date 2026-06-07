@@ -2,6 +2,8 @@
 // API'nin introspection'ı kapalı; bu sorgular giriş yapılmış oturumun
 // ağ trafiğinden yakalanıp birebir kullanıldı.
 
+import { fetchWithTimeout, withRetry, makeError } from "./http.js";
+
 const API_URL = "https://api.whispi.io/graphql";
 
 const LOGIN_MUTATION = `mutation Login($input: LoginInput!) {
@@ -20,33 +22,44 @@ const GET_QUESTIONS_QUERY = `query GetQuestions($sort: SortInput!, $pagination: 
 }`;
 
 async function gqlRequest(query, variables, token) {
-  const headers = {
-    "content-type": "application/json",
-    // Apollo'nun CSRF korumasını karşılayan başlık (gerçek istemci de gönderiyor).
-    "apollo-require-preflight": "true",
-  };
-  if (token) headers.authorization = `Bearer ${token}`;
+  return withRetry(
+    async () => {
+      const headers = {
+        "content-type": "application/json",
+        // Apollo'nun CSRF korumasını karşılayan başlık (gerçek istemci de gönderiyor).
+        "apollo-require-preflight": "true",
+      };
+      if (token) headers.authorization = `Bearer ${token}`;
 
-  const res = await fetch(API_URL, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ query, variables }),
-  });
+      const res = await fetchWithTimeout(API_URL, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ query, variables }),
+      });
 
-  let json = null;
-  try {
-    json = await res.json();
-  } catch {
-    /* gövde JSON değil */
-  }
+      if (!res.ok) {
+        // Gövdeyi LOGLAMA (token/PII sızabilir) — yalnızca durum kodu.
+        // 5xx ve 429 geçicidir → retry'a uygun.
+        throw makeError(`whispi API HTTP ${res.status}`, {
+          transient: res.status === 429 || res.status >= 500,
+        });
+      }
 
-  if (!res.ok || !json) {
-    throw new Error(`whispi API HTTP ${res.status}: ${JSON.stringify(json)}`);
-  }
-  if (Array.isArray(json.errors) && json.errors.length) {
-    throw new Error(`whispi GraphQL hatası: ${JSON.stringify(json.errors)}`);
-  }
-  return json.data;
+      let json = null;
+      try {
+        json = await res.json();
+      } catch {
+        throw makeError(`whispi API geçersiz JSON yanıtı (HTTP ${res.status})`, { transient: true });
+      }
+
+      if (Array.isArray(json.errors) && json.errors.length) {
+        // GraphQL hataları genelde kalıcıdır (sorgu/yetki). Sadece kodları/mesajları logla.
+        throw makeError(`whispi GraphQL hatası: ${JSON.stringify(json.errors)}`, { transient: false });
+      }
+      return json.data ?? {};
+    },
+    { label: "whispi API" },
+  );
 }
 
 /**
@@ -57,7 +70,10 @@ export async function login(identifier, password) {
   const data = await gqlRequest(LOGIN_MUTATION, {
     input: { identifier, password },
   });
-  const result = data.login;
+  const result = data?.login;
+  if (!result) {
+    throw new Error("Giriş başarısız: beklenmeyen API yanıtı (login alanı yok).");
+  }
   if (Array.isArray(result.errors) && result.errors.length) {
     const codes = result.errors.map((e) => e.code).join(", ");
     throw new Error(`Giriş başarısız (${codes}). E-posta/kullanıcı adı ve şifreyi kontrol et.`);
@@ -72,14 +88,30 @@ export async function login(identifier, password) {
 }
 
 /**
- * Gelen kutusundaki (henüz cevaplanmamış) soruları en yeniden eskiye döndürür.
- * @returns {Promise<Array<{id: string, content: string, createdAt: string}>>}
+ * Gelen kutusundaki (henüz cevaplanmamış) TÜM soruları sayfalayarak çeker.
+ * Yoğun/birikmiş kutuda soru kaçırmayı önler; güvenlik için maxQuestions ile sınırlanır.
+ * @returns {Promise<{questions: Array<{id, content, createdAt}>, total: number, truncated: boolean}>}
  */
-export async function getQuestions(token, limit = 30) {
-  const data = await gqlRequest(
-    GET_QUESTIONS_QUERY,
-    { sort: { order: "DESC" }, pagination: { limit, offset: 0 } },
-    token,
-  );
-  return data.questions.edges;
+export async function getQuestions(token, { pageSize = 50, maxQuestions = 500 } = {}) {
+  const all = [];
+  let offset = 0;
+  let total = 0;
+
+  while (all.length < maxQuestions) {
+    const limit = Math.min(pageSize, maxQuestions - all.length);
+    const data = await gqlRequest(
+      GET_QUESTIONS_QUERY,
+      { sort: { order: "DESC" }, pagination: { limit, offset } },
+      token,
+    );
+    const conn = data?.questions;
+    const edges = Array.isArray(conn?.edges) ? conn.edges : [];
+    total = conn?.pageInfo?.total ?? all.length + edges.length;
+    all.push(...edges);
+
+    if (edges.length === 0 || all.length >= total) break;
+    offset += edges.length;
+  }
+
+  return { questions: all, total, truncated: total > all.length };
 }

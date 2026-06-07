@@ -2,9 +2,9 @@ name: whispi bildirim
 
 on:
   schedule:
-    # Her 30 dakikada bir (private repo ücretsiz kotası ~2000 dk/ay altında kalsın diye).
-    # Daha sık istersen aralığı küçült; ama 5 dk altı GitHub'da genelde işe yaramaz.
-    - cron: "*/30 * * * *"
+    # Her 5 dakikada bir. Repo public olduğu için Actions dakikası sınırsız/ücretsiz.
+    # (GitHub schedule best-effort'tur; yoğunlukta birkaç dakika gecikebilir.)
+    - cron: "*/5 * * * *"
   workflow_dispatch: {} # Actions sekmesinden elle tetikleme
 
 permissions:
@@ -12,15 +12,15 @@ permissions:
 
 concurrency:
   group: whispi-notify
-  cancel-in-progress: false
+  cancel-in-progress: false # state yazan bir çalışmayı ortada iptal etme
 
 jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: "22"
 
@@ -32,13 +32,37 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: node src/index.js
 
-      - name: Durumu kaydet (yeni soru görüldüyse)
+      - name: Durumu kaydet
+        # always(): node adımı kısmi başarısız olsa bile, o ana kadar GÖNDERİLEN
+        # bildirimler state'e yazılmıştır (index.js yalnızca gönderileni "görüldü" yapar),
+        # bu yüzden bu durumu commit'lemek tekrar bildirimi önler.
         if: always()
+        env:
+          GITHUB_REF_NAME: ${{ github.ref_name }}
         run: |
           if [[ -n "$(git status --porcelain state.json)" ]]; then
             git config user.name "whispi-bot"
             git config user.email "actions@users.noreply.github.com"
             git add state.json
             git commit -m "chore: gelen kutusu durumu güncellendi [skip ci]"
-            git push
+            # Push reddedilirse (remote ilerlemişse) rebase'leyip tekrar dene.
+            pushed=false
+            for i in 1 2 3 4 5; do
+              if git push; then pushed=true; break; fi
+              echo "push reddedildi ($i/5), rebase ile tekrar deneniyor..."
+              git pull --rebase --autostash origin "$GITHUB_REF_NAME" || true
+              sleep $((RANDOM % 4 + 1))
+            done
+            if [[ "$pushed" != "true" ]]; then echo "::error::state.json push edilemedi"; exit 1; fi
           fi
+
+      - name: Hata bildirimi (çalışma başarısızsa)
+        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+            --data-urlencode "text=⚠️ whispi-notifier çalışması başarısız oldu. Loglar: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --data-urlencode "disable_web_page_preview=true" > /dev/null || true

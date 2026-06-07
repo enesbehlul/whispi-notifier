@@ -1,12 +1,12 @@
 # whispi-notifier
 
-whispi.io gelen kutuna **yeni bir soru** geldiğinde sana **Telegram'dan** anında bildirim gönderir.
+whispi.io gelen kutuna **yeni bir soru** geldiğinde sana **Telegram'dan** bildirim gönderir.
 
-GitHub Actions üzerinde ücretsiz çalışır — bilgisayarın kapalı olsa bile her ~30 dakikada bir kontrol eder. Kurulum tamamen bir kerelik.
+GitHub Actions üzerinde ücretsiz çalışır — bilgisayarın kapalı olsa bile her ~5 dakikada bir kontrol eder. Kurulum tamamen bir kerelik.
 
 ## Nasıl çalışır?
 
-1. GitHub Actions cron'u her ~30 dakikada bir `src/index.js`'i çalıştırır.
+1. GitHub Actions cron'u her ~5 dakikada bir `src/index.js`'i çalıştırır.
 2. Betik whispi.io GraphQL API'sine **giriş yapar** (`Login` mutation → `accessToken`).
 3. **Gelen kutusunu** çeker (`GetQuestions` sorgusu → cevaplanmamış sorular).
 4. `state.json`'daki "daha önce görülenler" listesiyle karşılaştırır.
@@ -65,13 +65,13 @@ GitHub repo sayfasında: **Settings → Secrets and variables → Actions → Ne
 2. **"whispi bildirim"** workflow'unu seç → **Run workflow** ile elle bir kez tetikle.
 3. İlk çalışma mevcut soruları "temel" alır ve bildirim **göndermez** (geçmiş sorular için spam olmasın diye). Bundan sonra gelen **yeni** her soru için Telegram'a mesaj düşer.
 
-Sonrası otomatik: cron her ~30 dakikada bir kontrol eder.
+Sonrası otomatik: cron her ~5 dakikada bir kontrol eder.
 
 ---
 
 ## Yerel test (opsiyonel)
 
-`.env.example`'ı `.env` olarak kopyalayıp doldurun, sonra:
+**Node 20.6+** gerekir (`--env-file` desteği için). `.env.example`'ı `.env` olarak kopyalayıp doldurun, sonra:
 
 ```bash
 npm run start:env
@@ -81,9 +81,25 @@ npm run start:env
 
 ---
 
+## İsteğe bağlı ayarlar (env / secret)
+
+Hepsi opsiyoneldir; GitHub secret'ı veya yerel `.env` olarak ayarlanabilir:
+
+| Değişken               | Varsayılan | Açıklama                                              |
+| ---------------------- | ---------- | ----------------------------------------------------- |
+| `WHISPI_MAX_QUESTIONS` | 500        | Her turda çekilecek azami soru sayısı (sayfalama tavanı). |
+| `REQUEST_TIMEOUT_MS`   | 15000      | Her HTTP isteği için zaman aşımı (ms).                |
+| `REQUEST_RETRIES`      | 3          | Geçici hatada yeniden deneme sayısı.                  |
+| `STATE_MAX_SEEN`       | 500        | `state.json`'da tutulacak azami "görülen" ID sayısı.  |
+
+---
+
 ## Notlar
 
-- **Kontrol sıklığı:** Varsayılan 30 dakikadır (private repo'nun ücretsiz ~2000 dk/ay kotası altında kalsın diye). `.github/workflows/notify.yml` içindeki `cron` değerinden değiştirebilirsin. Daha sık kontrol istersen repoyu **public** yapman önerilir — public repolarda Actions sınırsız ücretsizdir, o zaman 5 dakikaya çekebilirsin.
-- **Güvenlik:** Şifren yalnızca GitHub Secrets içinde şifreli durur, kodda/loglarda görünmez. İçin daha rahat olsun istersen whispi.io şifreni değiştirip yenisini secret olarak koyabilirsin.
-- **Token süresi:** Her çalışmada yeniden giriş yapılır, bu yüzden token süresini takip etmeye gerek yok.
-- **state.json:** "Görülen soru" geçmişini tutar; Actions her yeni soruda bunu repoya `[skip ci]` ile geri commit'ler (sonsuz tetikleme olmaz).
+- **Kontrol sıklığı:** Varsayılan **5 dakika** (`.github/workflows/notify.yml` içindeki `cron`). GitHub cron'u best-effort'tur; yoğunlukta birkaç dakika gecikebilir. Public repoda Actions sınırsız ücretsizdir; repoyu private yaparsan ücretsiz ~2000 dk/ay kotası için aralığı ~30 dk'ya çıkarman gerekir.
+- **Başarısızlık bildirimi:** Bir çalışma hata verirse (ör. şifre değişti, API erişilemedi) Telegram'a "çalışma başarısız" uyarısı gönderilir. Ayrıca GitHub, üst üste başarısız olan zamanlanmış workflow'ları ~60 gün sonra otomatik devre dışı bırakır — Actions e-posta bildirimlerini açık tutman önerilir.
+- **Güvenlik:** Şifren/token'ın yalnızca GitHub Secrets içinde şifreli durur; kodda ve loglarda görünmez. (Public repoda Actions logları herkese açıktır, ama betik soru **içeriğini** değil yalnızca soru ID'lerini loglar.) İçin daha rahat olsun istersen whispi.io şifreni değiştirip yenisini secret yapabilirsin.
+- **Gizlilik (public repo):** `state.json` ve commit geçmişi herkese açıktır; içinde soru **içeriği yok**, yalnızca soru ID'leri (UUID) ve commit zaman damgaları var — bu da "ne zaman kaç soru geldiği" gibi kaba bir meta veriyi ifşa eder. Rahatsız ederse repoyu private yap.
+- **Sağlamlık:** Tüm ağ istekleri zaman aşımlı ve geçici hatalarda otomatik yeniden denenir. Telegram gönderimi sırada kısmen başarısız olursa, gönderilenler kaydedilir; kalanlar sonraki turda denenir (tekrar bildirim olmaz).
+- **Token süresi:** Her çalışmada yeniden giriş yapılır, token süresini takip etmeye gerek yok.
+- **state.json:** "Görülen soru" geçmişini tutar; Actions her değişiklikte bunu repoya `[skip ci]` ile geri commit'ler. Push reddedilirse `git pull --rebase` ile tekrar denenir.
