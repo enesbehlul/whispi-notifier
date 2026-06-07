@@ -1,0 +1,43 @@
+name: whispi bildirim
+
+on:
+  schedule:
+    # GitHub cron'unun en küçük etkili aralığı ~5 dakikadır (ve yoğunlukta gecikebilir).
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {} # Actions sekmesinden elle tetikleme
+
+permissions:
+  contents: write # state.json'u repo'ya geri commit'lemek için
+
+concurrency:
+  group: whispi-notify
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Yeni soruları kontrol et ve bildir
+        env:
+          WHISPI_EMAIL: ${{ secrets.WHISPI_EMAIL }}
+          WHISPI_PASSWORD: ${{ secrets.WHISPI_PASSWORD }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: node src/index.js
+
+      - name: Durumu kaydet (yeni soru görüldüyse)
+        if: always()
+        run: |
+          if [[ -n "$(git status --porcelain state.json)" ]]; then
+            git config user.name "whispi-bot"
+            git config user.email "actions@users.noreply.github.com"
+            git add state.json
+            git commit -m "chore: gelen kutusu durumu güncellendi [skip ci]"
+            git push
+          fi

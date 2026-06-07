@@ -1,0 +1,15 @@
+{
+  "name": "whispi-notifier",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "whispi.io gelen kutusuna yeni soru geldiğinde Telegram bildirimi gönderir",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "start:env": "node --env-file=.env src/index.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
