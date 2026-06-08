@@ -261,8 +261,8 @@ async function check(): Promise<void> {
   console.log(`Tamamlandı (${sent}/${fresh.length} bildirim).`);
 }
 
-// Deno Deploy bu tanımı otomatik algılar ve her dakika çalıştırır.
-Deno.cron("whispi-check", "* * * * *", async () => {
+// Deno Deploy bu tanımı otomatik algılar ve her 5 dakikada bir çalıştırır.
+Deno.cron("whispi-check", "*/5 * * * *", async () => {
   try {
     await check();
   } catch (err) {
@@ -273,7 +273,7 @@ Deno.cron("whispi-check", "* * * * *", async () => {
 // Platformun bir HTTP sunucusu beklediği durumlar için minimal sağlık ucu.
 // Asıl iş yukarıdaki cron ile yapılır; burası sadece "ayakta mı?" cevabı verir.
 Deno.serve(() =>
-  new Response("whispi-notifier çalışıyor ✓ (kontrol her dakika cron ile yapılır)\n", {
+  new Response("whispi-notifier çalışıyor ✓ (kontrol her 5 dakikada bir cron ile yapılır)\n", {
     headers: { "content-type": "text/plain; charset=utf-8" },
   })
 );
