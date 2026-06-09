@@ -119,9 +119,14 @@ function jwtExp(token: string): number | null {
 async function getAuth(identifier: string, password: string, forceLogin = false): Promise<{ token: string; username: string }> {
   const now = Math.floor(Date.now() / 1000);
   if (!forceLogin) {
-    const cached = await kv.get<{ token: string; username: string; exp: number }>(TOKEN_KEY);
-    if (cached.value && cached.value.exp - now > 3600) {
-      return { token: cached.value.token, username: cached.value.username };
+    try {
+      const cached = await kv.get<{ token: string; username: string; exp: number }>(TOKEN_KEY);
+      if (cached.value && cached.value.exp - now > 3600) {
+        return { token: cached.value.token, username: cached.value.username };
+      }
+    } catch (err) {
+      // Token önbelleği okunamazsa (bozuk değer) sorun değil → yeniden giriş yapılır.
+      console.warn(`Token önbelleği okunamadı, yeniden giriş yapılacak: ${(err as Error).message}`);
     }
   }
   const { accessToken, username } = await login(identifier, password);
@@ -191,8 +196,19 @@ async function sendTelegram(botToken: string, chatId: string, text: string): Pro
 
 // ---- durum (Deno KV) ----
 async function readState(): Promise<{ initialized: boolean; seenIds: string[] }> {
-  const res = await kv.get<{ initialized: boolean; seenIds: string[] }>(STATE_KEY);
-  return res.value ?? { initialized: false, seenIds: [] };
+  try {
+    const res = await kv.get<{ initialized: boolean; seenIds: string[] }>(STATE_KEY);
+    const v = res.value;
+    if (v && typeof v === "object") {
+      return { initialized: Boolean(v.initialized), seenIds: Array.isArray(v.seenIds) ? v.seenIds : [] };
+    }
+    return { initialized: false, seenIds: [] };
+  } catch (err) {
+    // Bozuk/okunamayan KV değeri (ör. "could not deserialize value") → temiz başlangıç.
+    // Bir sonraki writeState bu değerin ÜZERİNE sağlamını yazar → kendini onarır.
+    console.warn(`Durum okunamadı, sıfırlanıyor: ${(err as Error).message}`);
+    return { initialized: false, seenIds: [] };
+  }
 }
 async function writeState(seenIds: string[]): Promise<void> {
   await kv.set(STATE_KEY, { initialized: true, seenIds: seenIds.slice(-500) });
